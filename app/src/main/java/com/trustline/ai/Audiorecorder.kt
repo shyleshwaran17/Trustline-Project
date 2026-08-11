@@ -13,7 +13,7 @@ class AudioRecorder(private val context: Context) {
 
         outputFile = File(
             context.cacheDir,
-            "TrustLine_test_audio.m4a"
+            "TrustLine_${System.currentTimeMillis()}.m4a"
         )
 
         recorder = MediaRecorder(context).apply {

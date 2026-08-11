@@ -2,6 +2,8 @@ package com.trustline.ai
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import android.util.Log
 import com.trustline.ai.network.UploadRepository
 import android.Manifest
@@ -34,7 +36,7 @@ import androidx.core.content.ContextCompat
 class MainActivity : ComponentActivity() {
 
     private lateinit var audioRecorder: AudioRecorder
-
+    private var recordingJob: Job? = null
     private val microphonePermissionLauncher =
         registerForActivityResult(
             ActivityResultContracts.RequestPermission()
@@ -66,6 +68,80 @@ class MainActivity : ComponentActivity() {
 
                         audioRecorder.startRecording()
 
+                        recordingJob = lifecycleScope.launch {
+
+                            while (true) {
+
+                                delay(8000)
+
+                                val audioFile = audioRecorder.stopRecording()
+
+                                if (audioFile != null) {
+
+                                    audioRecorder.startRecording()
+
+                                    Log.d(
+                                        "TrustLine",
+                                        "Uploading audio chunk: ${audioFile.name}"
+                                    )
+
+                                    lifecycleScope.launch {
+
+                                        try {
+
+                                            val result =
+                                                UploadRepository.uploadAudio(audioFile)
+
+                                            if (result != null) {
+
+                                                trustLineViewModel.updateResult(
+                                                    score = result.trust_score,
+                                                    pred = result.prediction,
+                                                    conf = result.confidence,
+                                                    text = result.transcript
+                                                )
+
+                                                Log.d(
+                                                    "TrustLine",
+                                                    "Chunk prediction = ${result.prediction}"
+                                                )
+
+                                                Log.d(
+                                                    "TrustLine",
+                                                    "Chunk confidence = ${result.confidence}"
+                                                )
+
+                                                Log.d(
+                                                    "TrustLine",
+                                                    "Chunk trust score = ${result.trust_score}"
+                                                )
+
+                                                Log.d(
+                                                    "TrustLine",
+                                                    "Chunk transcript = ${result.transcript}"
+                                                )
+
+                                            } else {
+
+                                                Log.e(
+                                                    "TrustLine",
+                                                    "Chunk upload failed"
+                                                )
+                                            }
+
+                                        } catch (e: Exception) {
+
+                                            Log.e(
+                                                "TrustLine",
+                                                "Chunk upload exception",
+                                                e
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                     } else {
 
                         microphonePermissionLauncher.launch(
@@ -73,48 +149,17 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                 },
-
                 onStopRecording = {
 
-                    val audioFile = audioRecorder.stopRecording()
+                    recordingJob?.cancel()
+                    recordingJob = null
 
-                    if (audioFile != null) {
+                    audioRecorder.stopRecording()
 
-                        lifecycleScope.launch {
-
-                            try {
-
-                                Log.d("TrustLine", "Uploading audio...")
-
-                                val result = UploadRepository.uploadAudio(audioFile)
-
-                                if (result != null) {
-
-                                    trustLineViewModel.updateResult(
-                                        score = result.trust_score,
-                                        pred = result.prediction,
-                                        conf = result.confidence,
-                                        text = result.transcript
-                                    )
-
-                                    Log.d("TrustLine", "Trust Score = ${result.trust_score}")
-                                    Log.d("TrustLine", "Prediction = ${result.prediction}")
-                                    Log.d("TrustLine", "Confidence = ${result.confidence}")
-                                    Log.d("TrustLine", "Transcript = ${result.transcript}")
-
-                                } else {
-
-                                    Log.e("TrustLine", "Upload failed")
-
-                                }
-
-                            } catch (e: Exception) {
-
-                                Log.e("TrustLine", "Upload Exception", e)
-
-                            }
-                        }
-                    }
+                    Log.d(
+                        "TrustLine",
+                        "Monitoring stopped"
+                    )
                 }
             )
         }
@@ -173,27 +218,42 @@ fun TrustLineApp(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(25.dp),
+                        .padding(24.dp),
 
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
 
                     Text(
+                        text = when {
+                            trustScore >= 80 -> "🟢"
+                            trustScore >= 50 -> "🟡"
+                            else -> "🔴"
+                        },
+                        fontSize = 42.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = trustScore.toString(),
+                        fontSize = 56.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Text(
                         text = "TRUST SCORE",
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.SemiBold
                     )
 
-                    Text(
-                        text = "$trustScore / 100",
-                        fontSize = 42.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        text = if (isRecording)
-                            "MONITORING"
-                        else
-                            "NOT MONITORING"
+                        text = when {
+                            trustScore >= 80 -> "SAFE"
+                            trustScore >= 50 -> "CAUTION"
+                            else -> "HIGH RISK"
+                        },
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
