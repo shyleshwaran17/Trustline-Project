@@ -1,5 +1,5 @@
 package com.trustline.ai
-
+import android.util.Log
 import android.content.Context
 import android.media.MediaRecorder
 import java.io.File
@@ -16,7 +16,7 @@ class AudioRecorder(private val context: Context) {
             "TrustLine_${System.currentTimeMillis()}.m4a"
         )
 
-        recorder = MediaRecorder(context).apply {
+        recorder = MediaRecorder().apply {
 
             setAudioSource(MediaRecorder.AudioSource.MIC)
 
@@ -39,13 +39,35 @@ class AudioRecorder(private val context: Context) {
 
     fun stopRecording(): File? {
 
-        recorder?.apply {
-            stop()
-            release()
-        }
+        val currentRecorder = recorder
+            ?: return null
+
+        val currentFile = outputFile
 
         recorder = null
+        outputFile = null
 
-        return outputFile
+        try {
+
+            currentRecorder.stop()
+
+        } catch (e: RuntimeException) {
+
+            Log.e(
+                "TrustLine",
+                "MediaRecorder stop failed",
+                e
+            )
+
+            return null
+
+        } finally {
+
+            currentRecorder.release()
+        }
+
+        return currentFile?.takeIf {
+            it.exists() && it.length() > 0
+        }
     }
 }

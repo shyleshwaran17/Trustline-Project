@@ -1,5 +1,5 @@
 package com.trustline.ai
-import androidx.lifecycle.viewmodel.compose.viewModel
+
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -39,6 +39,14 @@ class TrustLineViewModel : ViewModel() {
         trustScore = score
         prediction = pred
         confidence = conf
-        transcript = text
+
+        if (text.isNotBlank()) {
+
+            if (transcript == "Waiting for call audio...") {
+                transcript = text.trim()
+            } else {
+                transcript = "$transcript\n\n${text.trim()}"
+            }
+        }
     }
 }
