@@ -4,6 +4,7 @@ from pathlib import Path
 
 from rules import analyze
 from ai_classifier import classify
+from deepfake_detector import detect_voice_deepfake
 
 app = Flask(__name__)
 
@@ -72,7 +73,10 @@ def analyze_audio():
     upload_path = Path("temp_audio.mp3")
     audio.save(upload_path)
 
+    # -----------------------------
     # Check very small audio files
+    # -----------------------------
+
     if upload_path.stat().st_size < 1000:
         return jsonify({
             "transcript": "",
@@ -82,15 +86,24 @@ def analyze_audio():
             "prediction": "audio too short",
             "ai_prediction": "audio too short",
             "confidence": 0,
-            "risk_override": False
+            "risk_override": False,
+            "voice_prediction": "unknown",
+            "voice_label": "unknown",
+            "voice_confidence": 0
         })
 
-    # Transcribe audio
+    # -----------------------------
+    # Whisper transcription
+    # -----------------------------
+
     transcript = model.transcribe(str(upload_path))
 
     text = transcript["text"].strip()
 
-    # Ignore empty transcripts
+    # -----------------------------
+    # Ignore empty audio
+    # -----------------------------
+
     if not text:
         return jsonify({
             "transcript": "",
@@ -100,8 +113,21 @@ def analyze_audio():
             "prediction": "no speech detected",
             "ai_prediction": "no speech detected",
             "confidence": 0,
-            "risk_override": False
+            "risk_override": False,
+            "voice_prediction": "unknown",
+            "voice_label": "unknown",
+            "voice_confidence": 0
         })
+
+    # -----------------------------
+    # Deepfake / voice-clone detection
+    # -----------------------------
+
+    voice_result = detect_voice_deepfake(str(upload_path))
+
+    voice_prediction = voice_result["prediction"]
+    voice_label = voice_result["label"]
+    voice_confidence = voice_result["confidence"]
 
     # -----------------------------
     # Rule-based analysis
@@ -119,7 +145,7 @@ def analyze_audio():
     confidence = ai_result["confidence"] * 100
 
     # -----------------------------
-    # Calculate combined Trust Score
+    # Calculate current Trust Score
     # -----------------------------
 
     final_score = calculate_final_score(
@@ -129,7 +155,7 @@ def analyze_audio():
     )
 
     # -----------------------------
-    # Final TrustLine risk prediction
+    # Final TrustLine prediction
     # -----------------------------
 
     final_prediction = get_risk_prediction(final_score)
@@ -141,24 +167,38 @@ def analyze_audio():
     print("Transcript:", text)
     print("Rule score:", score)
     print("Detected:", reasons)
+
     print("AI prediction:", ai_prediction)
     print("AI confidence:", confidence)
+
+    print("Voice prediction:", voice_prediction)
+    print("Voice label:", voice_label)
+    print("Voice confidence:", voice_confidence)
+
     print("Final prediction:", final_prediction)
     print("Final trust score:", final_score)
 
     # -----------------------------
-    # Return result to Android
+    # Return result
     # -----------------------------
 
     return jsonify({
         "transcript": text,
+
         "trust_score": final_score,
         "rule_score": score,
+
         "detected": reasons,
+
         "prediction": final_prediction,
         "ai_prediction": ai_prediction,
         "confidence": round(confidence, 2),
-        "risk_override": False
+
+        "risk_override": False,
+
+        "voice_prediction": voice_prediction,
+        "voice_label": voice_label,
+        "voice_confidence": round(voice_confidence, 2)
     })
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
