@@ -15,7 +15,13 @@ print("Whisper model loaded!")
 @app.route("/")
 def home():
     return "TrustLine AI Backend is Running!"
-def calculate_final_score(rule_score, prediction, confidence):
+def calculate_final_score(
+    rule_score,
+    prediction,
+    confidence,
+    voice_label="real",
+    voice_confidence=100
+):
 
     prediction = prediction.lower()
 
@@ -25,6 +31,10 @@ def calculate_final_score(rule_score, prediction, confidence):
         "technical support scam",
         "identity theft"
     }
+
+    # -----------------------------
+    # AI trust score
+    # -----------------------------
 
     if prediction == "normal conversation":
 
@@ -38,12 +48,48 @@ def calculate_final_score(rule_score, prediction, confidence):
 
         ai_score = 50
 
+    # -----------------------------
+    # Voice authenticity score
+    # -----------------------------
+
+    voice_label = voice_label.lower()
+
+    if voice_label == "fake":
+
+        voice_score = 100 - voice_confidence
+
+    elif voice_label == "real":
+
+        voice_score = 100
+
+    else:
+
+        voice_score = 50
+
+    # -----------------------------
+    # Combine three signals
+    # -----------------------------
+
     final_score = int(
-        (rule_score * 0.5) +
-        (ai_score * 0.5)
+        (rule_score * 0.40) +
+        (ai_score * 0.40) +
+        (voice_score * 0.20)
     )
 
+    # -----------------------------
+    # Strong scam safeguard
+    # -----------------------------
+
     if prediction in scam_labels and confidence >= 90:
+
+        final_score = min(final_score, 40)
+
+    # -----------------------------
+    # Strong voice-clone safeguard
+    # -----------------------------
+
+    if voice_label == "fake" and voice_confidence >= 90:
+
         final_score = min(final_score, 40)
 
     return max(0, min(100, final_score))
@@ -148,10 +194,16 @@ def analyze_audio():
     # Calculate current Trust Score
     # -----------------------------
 
+       # -----------------------------
+    # Calculate combined Trust Score
+    # -----------------------------
+
     final_score = calculate_final_score(
         score,
         ai_prediction,
-        confidence
+        confidence,
+        voice_label,
+        voice_confidence
     )
 
     # -----------------------------
