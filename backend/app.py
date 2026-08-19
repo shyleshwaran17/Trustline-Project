@@ -22,7 +22,6 @@ def calculate_final_score(
     voice_label="real",
     voice_confidence=100
 ):
-
     prediction = prediction.lower()
 
     scam_labels = {
@@ -37,15 +36,12 @@ def calculate_final_score(
     # -----------------------------
 
     if prediction == "normal conversation":
-
         ai_score = confidence
 
     elif prediction in scam_labels:
-
         ai_score = 100 - confidence
 
     else:
-
         ai_score = 50
 
     # -----------------------------
@@ -55,15 +51,12 @@ def calculate_final_score(
     voice_label = voice_label.lower()
 
     if voice_label == "fake":
-
         voice_score = 100 - voice_confidence
 
     elif voice_label == "real":
-
         voice_score = 100
 
     else:
-
         voice_score = 50
 
     # -----------------------------
@@ -76,24 +69,17 @@ def calculate_final_score(
         (voice_score * 0.20)
     )
 
-    # -----------------------------
     # Strong scam safeguard
-    # -----------------------------
-
     if prediction in scam_labels and confidence >= 90:
-
         final_score = min(final_score, 40)
 
-    # -----------------------------
     # Strong voice-clone safeguard
-    # -----------------------------
-
     if voice_label == "fake" and voice_confidence >= 90:
-
         final_score = min(final_score, 40)
 
-    return max(0, min(100, final_score))
+    final_score = max(0, min(100, final_score))
 
+    return final_score, ai_score, voice_score
 
 def get_risk_prediction(score):
 
@@ -198,20 +184,76 @@ def analyze_audio():
     # Calculate combined Trust Score
     # -----------------------------
 
-    final_score = calculate_final_score(
-        score,
-        ai_prediction,
-        confidence,
-        voice_label,
-        voice_confidence
-    )
+    final_score, ai_score, voice_score = calculate_final_score(
+    score,
+    ai_prediction,
+    confidence,
+    voice_label,
+    voice_confidence
+)
 
     # -----------------------------
     # Final TrustLine prediction
     # -----------------------------
 
     final_prediction = get_risk_prediction(final_score)
+    # -----------------------------
+    # Explainable risk reasons
+    # -----------------------------
 
+    risk_reasons = []
+
+    if reasons:
+        for reason in reasons:
+            risk_reasons.append(
+                f"Suspicious keyword detected: {reason}"
+            )
+
+    if ai_prediction in {
+        "scam phone call",
+        "banking fraud",
+        "technical support scam",
+        "identity theft"
+    }:
+        risk_reasons.append(
+            f"AI classified the conversation as {ai_prediction}"
+        )
+
+    if confidence >= 80:
+        risk_reasons.append(
+            f"AI confidence is {confidence:.2f}%"
+        )
+
+    if voice_label == "fake":
+        risk_reasons.append(
+            f"Possible AI-generated or cloned voice detected "
+            f"with {voice_confidence:.2f}% confidence"
+        )
+
+    elif voice_label == "real":
+        risk_reasons.append(
+            f"Voice appears human ({voice_confidence:.2f}% confidence)"
+        )
+     # -----------------------------
+    # Voice explanation
+    # -----------------------------
+
+    if voice_label == "fake":
+        voice_analysis = (
+            "Possible voice clone detected. "
+            "Verify the caller's identity independently."
+        )
+
+    elif voice_label == "real":
+        voice_analysis = (
+            "Voice appears human. "
+            "This does not guarantee that the conversation is safe."
+        )
+
+    else:
+        voice_analysis = (
+            "Voice authenticity could not be determined."
+        )
     # -----------------------------
     # Debug information
     # -----------------------------
@@ -239,8 +281,11 @@ def analyze_audio():
 
         "trust_score": final_score,
         "rule_score": score,
+        "ai_score": round(ai_score, 2),
+        "voice_score": round(voice_score, 2),
 
         "detected": reasons,
+        "risk_reasons": risk_reasons,
 
         "prediction": final_prediction,
         "ai_prediction": ai_prediction,
@@ -250,7 +295,8 @@ def analyze_audio():
 
         "voice_prediction": voice_prediction,
         "voice_label": voice_label,
-        "voice_confidence": round(voice_confidence, 2)
+        "voice_confidence": round(voice_confidence, 2),
+        "voice_analysis": voice_analysis
     })
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
