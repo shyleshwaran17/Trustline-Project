@@ -22,6 +22,7 @@ def calculate_final_score(
     voice_label="real",
     voice_confidence=100
 ):
+
     prediction = prediction.lower()
 
     scam_labels = {
@@ -60,27 +61,75 @@ def calculate_final_score(
         voice_score = 50
 
     # -----------------------------
-    # Combine three signals
+    # Risk override reasons
+    # -----------------------------
+
+    override_reasons = []
+
+    # -----------------------------
+    # Base weighted trust score
     # -----------------------------
 
     final_score = int(
-        (rule_score * 0.40) +
-        (ai_score * 0.40) +
-        (voice_score * 0.20)
+        (rule_score * 0.45) +
+        (ai_score * 0.45) +
+        (voice_score * 0.10)
     )
 
-    # Strong scam safeguard
+    # -----------------------------
+    # SECURITY RISK OVERRIDES
+    # -----------------------------
+
+    if prediction in scam_labels and confidence >= 80:
+        final_score = min(final_score, 30)
+
+        override_reasons.append(
+            "High-confidence AI scam detection triggered a security score limit."
+        )
+
+    if rule_score <= 30:
+        final_score = min(final_score, 40)
+
+        override_reasons.append(
+            "Multiple suspicious conversation patterns triggered a risk score limit."
+        )
+
+    if voice_label == "fake":
+        final_score = min(final_score, 50)
+
+        override_reasons.append(
+            "Possible AI-generated or cloned voice triggered a security score limit."
+        )
+
+    if (
+        prediction in scam_labels
+        and confidence >= 70
+        and rule_score <= 50
+    ):
+        final_score = min(final_score, 20)
+
+        override_reasons.append(
+            "Critical risk override: AI scam detection combined with suspicious financial language."
+        )
+
     if prediction in scam_labels and confidence >= 90:
-        final_score = min(final_score, 40)
+        final_score = min(final_score, 15)
 
-    # Strong voice-clone safeguard
+        override_reasons.append(
+            "Critical risk override: Very high AI confidence indicates a likely scam."
+        )
+
     if voice_label == "fake" and voice_confidence >= 90:
-        final_score = min(final_score, 40)
+        final_score = min(final_score, 39)
 
+        override_reasons.append(
+            "Critical risk override: High-confidence cloned or AI-generated voice detected."
+        )
+
+    # Ensure score stays between 0 and 100
     final_score = max(0, min(100, final_score))
 
-    return final_score, ai_score, voice_score
-
+    return final_score, ai_score, voice_score, override_reasons
 def get_risk_prediction(score):
 
     if score >= 80:
@@ -139,16 +188,25 @@ def analyze_audio():
     if not text:
         return jsonify({
             "transcript": "",
-            "trust_score": 100,
+            "trust_score": 0,
             "rule_score": 100,
             "detected": [],
             "prediction": "no speech detected",
             "ai_prediction": "no speech detected",
             "confidence": 0,
+            "ai_score": 0,
+
             "risk_override": False,
+
             "voice_prediction": "unknown",
             "voice_label": "unknown",
-            "voice_confidence": 0
+            "voice_confidence": 0,
+            "voice_score": 0,
+
+            "risk_reasons": [
+                "No speech detected in this audio chunk"
+            ],
+                "voice_analysis": "Voice authenticity could not be determined."
         })
 
     # -----------------------------
@@ -184,13 +242,14 @@ def analyze_audio():
     # Calculate combined Trust Score
     # -----------------------------
 
-    final_score, ai_score, voice_score = calculate_final_score(
+    final_score, ai_score, voice_score, override_reasons = calculate_final_score(
     score,
     ai_prediction,
     confidence,
     voice_label,
     voice_confidence
 )
+
 
     # -----------------------------
     # Final TrustLine prediction
@@ -254,6 +313,11 @@ def analyze_audio():
         voice_analysis = (
             "Voice authenticity could not be determined."
         )
+        # -----------------------------
+# Add security override reasons
+# -----------------------------
+
+    risk_reasons.extend(override_reasons)
     # -----------------------------
     # Debug information
     # -----------------------------
@@ -291,12 +355,13 @@ def analyze_audio():
         "ai_prediction": ai_prediction,
         "confidence": round(confidence, 2),
 
-        "risk_override": False,
+       "risk_override": len(override_reasons) > 0,
 
         "voice_prediction": voice_prediction,
         "voice_label": voice_label,
         "voice_confidence": round(voice_confidence, 2),
         "voice_analysis": voice_analysis
     })
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)

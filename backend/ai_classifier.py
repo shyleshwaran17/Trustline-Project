@@ -1,24 +1,40 @@
 from transformers import pipeline
 
-print("Loading AI model... (first run may take a minute)")
+print("Loading BERT Scam Call Classifier... (first run may take a few minutes)")
 
 classifier = pipeline(
-    "zero-shot-classification",
-    model="facebook/bart-large-mnli"
+    "text-classification",
+    model="hatim00101/bert-scam-classifier"
 )
 
-LABELS = [
-    "scam phone call",
-    "normal conversation",
-    "banking fraud",
-    "technical support scam",
-    "identity theft"
-]
 
 def classify(text):
-    result = classifier(text, LABELS)
-    print(result)
+
+    # Run BERT prediction
+    result = classifier(text)[0]
+
+    print("BERT result:", result)
+
+    raw_label = result["label"]
+    confidence = float(result["score"])
+
+    # Convert model output into TrustLine labels
+    #
+    # Model:
+    # 0 = non_scam
+    # 1 = scam
+    #
+    # Some model versions may expose LABEL_0 / LABEL_1 instead.
+
+    raw_label_lower = raw_label.lower()
+
+    if raw_label_lower in ["1", "label_1", "scam"]:
+        label = "scam phone call"
+
+    else:
+        label = "normal conversation"
+
     return {
-        "label": result["labels"][0],
-        "confidence": result["scores"][0]
-    } 
+        "label": label,
+        "confidence": confidence
+    }
